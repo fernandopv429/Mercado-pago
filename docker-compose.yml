@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  mercadopago-api:
+    build: .
+    container_name: mercadopago-api
+    ports:
+      - "3000:3000"
+    environment:
+      - FLASK_APP=app_flask.py
+      - FLASK_ENV=production
+      - PORT=3000
+      - MERCADOPAGO_ACCESS_TOKEN=${MERCADOPAGO_ACCESS_TOKEN:-APP_USR-dd6ff542-e610-4ace-ba58-d1b8323ff652}
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
