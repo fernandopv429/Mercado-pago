@@ -23,8 +23,8 @@ Exemplo:
 """
 
 from flask import Blueprint, request, jsonify
-from ..services import CarrinhoService
-from ..models import Produto
+from ...services import CarrinhoService
+from ...models import Produto
 
 # Criar blueprint de rotas
 carrinho_bp = Blueprint('carrinho', __name__, url_prefix='/api/carrinho')

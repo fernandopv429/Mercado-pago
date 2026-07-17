@@ -16,7 +16,7 @@ Exemplo:
 """
 
 from flask import Blueprint, request, jsonify
-from ..services import CarrinhoService, PagamentoService
+from ...services import CarrinhoService, PagamentoService
 import os
 
 # Criar blueprint de rotas

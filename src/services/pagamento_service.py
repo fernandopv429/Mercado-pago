@@ -19,7 +19,14 @@ Exemplo de uso:
 """
 
 from typing import Dict, Optional
-import mercadopago
+
+try:
+    import mercadopago
+    MERCADOPAGO_DISPONIVEL = True
+except ImportError:
+    mercadopago = None
+    MERCADOPAGO_DISPONIVEL = False
+
 from ..models import CarrinhoCompras
 
 
@@ -56,6 +63,12 @@ class PagamentoService:
         """
         if not access_token or not isinstance(access_token, str):
             raise ValueError("Access token deve ser uma string não vazia")
+        
+        if not MERCADOPAGO_DISPONIVEL:
+            raise ImportError(
+                "O pacote 'mercadopago' não está instalado. "
+                "Instale com: pip install mercadopago"
+            )
         
         self.access_token = access_token
         self.sdk = mercadopago.SDK(access_token)

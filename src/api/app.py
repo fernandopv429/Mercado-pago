@@ -46,7 +46,10 @@ def criar_app(config=None) -> Flask:
     app = Flask(__name__)
     
     # Configurar aplicação
-    config = config or obter_config(os.getenv('FLASK_ENV', 'development'))
+    if config is None:
+        config = obter_config(os.getenv('FLASK_ENV', 'development'))
+    elif isinstance(config, str):
+        config = obter_config(config)
     app.config.from_object(config)
     
     # ========== MIDDLEWARE ==========
