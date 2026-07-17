@@ -23,14 +23,11 @@ Exemplo:
 """
 
 from flask import Blueprint, request, jsonify
-from ...services import CarrinhoService
 from ...models import Produto
+from ...services.instancias import carrinho_service
 
 # Criar blueprint de rotas
 carrinho_bp = Blueprint('carrinho', __name__, url_prefix='/api/carrinho')
-
-# Instância global do serviço (idealmente seria injetada)
-carrinho_service = CarrinhoService()
 
 
 # ========== OPERAÇÕES DE CONSULTA ==========

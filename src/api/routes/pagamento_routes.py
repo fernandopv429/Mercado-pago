@@ -16,18 +16,10 @@ Exemplo:
 """
 
 from flask import Blueprint, request, jsonify
-from ...services import CarrinhoService, PagamentoService
-import os
+from ...services.instancias import carrinho_service, pagamento_service, ACCESS_TOKEN
 
 # Criar blueprint de rotas
 pagamento_bp = Blueprint('pagamento', __name__, url_prefix='/api/pagamento')
-
-# Obter access token da variável de ambiente
-ACCESS_TOKEN = os.getenv('MERCADOPAGO_ACCESS_TOKEN', '')
-
-# Instâncias globais dos serviços
-carrinho_service = CarrinhoService()
-pagamento_service = PagamentoService(ACCESS_TOKEN) if ACCESS_TOKEN else None
 
 
 # ========== VALIDAÇÃO DE CONFIGURAÇÃO ==========
