@@ -153,6 +153,56 @@ class PagamentoService:
     
     # ========== MÉTODOS AUXILIARES ==========
     
+    # ========== CONSULTA DE PAGAMENTO ==========
+
+    def consultar_pagamento(self, pagamento_id: str) -> Dict:
+        """
+        Consulta o status de um pagamento no Mercado Pago pelo ID.
+
+        Usado tanto pela rota de consulta manual quanto pelo webhook,
+        que recebe o ID do pagamento e precisa confirmar o status real
+        direto na API (nunca confie apenas no que chega no webhook).
+
+        Args:
+            pagamento_id (str): ID do pagamento no Mercado Pago
+
+        Returns:
+            dict: Dados do pagamento, incluindo 'status' e 'aprovado'.
+        """
+        try:
+            resposta = self.sdk.payment().get(pagamento_id)
+            status_code = resposta.get('status')
+            dados = resposta.get('response', {})
+
+            if status_code != 200 or not dados:
+                return {
+                    'sucesso': False,
+                    'erro': f"Pagamento nao encontrado (HTTP {status_code})",
+                    'pagamento_id': str(pagamento_id),
+                }
+
+            status = dados.get('status', 'unknown')
+
+            return {
+                'sucesso': True,
+                'pagamento_id': str(pagamento_id),
+                'status': status,
+                'status_detalhe': dados.get('status_detail', ''),
+                'aprovado': status == 'approved',
+                'valor': dados.get('transaction_amount', 0),
+                'email': (dados.get('payer') or {}).get('email', ''),
+                'metodo': dados.get('payment_method_id', ''),
+                'referencia_externa': dados.get('external_reference', ''),
+                'data_aprovacao': dados.get('date_approved', ''),
+            }
+
+        except Exception as erro:
+            return {
+                'sucesso': False,
+                'erro': f"Erro ao consultar pagamento: {str(erro)}",
+                'pagamento_id': str(pagamento_id),
+            }
+
     def _formatar_items(self, carrinho: CarrinhoCompras) -> list:
         """
         Formata os produtos do carrinho para o formato da API Mercado Pago.

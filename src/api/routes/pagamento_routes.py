@@ -188,3 +188,90 @@ def health_check_pagamento():
         "token_configurado": bool(ACCESS_TOKEN),
         "mensagem": mensagem if not configurado else "Serviço de pagamento operacional"
     }), 200 if configurado else 500
+
+
+# ========== WEBHOOK E CONSULTA DE STATUS ==========
+
+@pagamento_bp.route('/webhook', methods=['POST'])
+def webhook_mercadopago():
+    """
+    Endpoint: POST /api/pagamento/webhook
+
+    Recebe notificacoes automaticas do Mercado Pago quando o status
+    de um pagamento muda. O Mercado Pago envia o ID do pagamento; este
+    endpoint consulta a API para confirmar o status real e, se aprovado,
+    executa as acoes necessarias.
+
+    IMPORTANTE: sempre responder 200 rapidamente, senao o Mercado Pago
+    reenvia a notificacao varias vezes.
+    """
+    if pagamento_service is None:
+        # Ainda assim retornamos 200 para o MP nao ficar reenviando
+        return jsonify({"recebido": True, "aviso": "servico nao configurado"}), 200
+
+    try:
+        # O MP manda o tipo e o id de formas diferentes dependendo do evento.
+        # Tentamos extrair de query string e do corpo JSON.
+        tipo = request.args.get('type') or request.args.get('topic')
+        pagamento_id = request.args.get('data.id') or request.args.get('id')
+
+        if not pagamento_id:
+            corpo = request.get_json(silent=True) or {}
+            tipo = tipo or corpo.get('type') or corpo.get('action')
+            dados = corpo.get('data') or {}
+            pagamento_id = dados.get('id') or corpo.get('id')
+
+        # So nos interessa evento de pagamento
+        if tipo and 'payment' not in str(tipo):
+            return jsonify({"recebido": True, "ignorado": tipo}), 200
+
+        if not pagamento_id:
+            return jsonify({"recebido": True, "aviso": "sem id"}), 200
+
+        # Confirma o status real na API do Mercado Pago
+        info = pagamento_service.consultar_pagamento(str(pagamento_id))
+
+        if info.get('sucesso') and info.get('aprovado'):
+            # >>> PONTO DE INTEGRACAO <<<
+            # Aqui o pagamento esta CONFIRMADO como aprovado.
+            # Ex.: marcar pedido como pago, limpar carrinho, liberar produto.
+            print(f"[WEBHOOK] Pagamento APROVADO: id={info['pagamento_id']} "
+                  f"valor={info['valor']} email={info['email']}")
+        else:
+            print(f"[WEBHOOK] Pagamento id={pagamento_id} "
+                  f"status={info.get('status')}")
+
+        return jsonify({"recebido": True}), 200
+
+    except Exception as erro:
+        # Nunca deixar estourar erro pro MP; logamos e devolvemos 200
+        print(f"[WEBHOOK] Erro ao processar: {erro}")
+        return jsonify({"recebido": True}), 200
+
+
+@pagamento_bp.route('/status/<pagamento_id>', methods=['GET'])
+def consultar_status_pagamento(pagamento_id: str):
+    """
+    Endpoint: GET /api/pagamento/status/<pagamento_id>
+
+    Consulta o status atual de um pagamento pelo ID. Util para verificar
+    manualmente ou quando o cliente retorna para a tela de sucesso.
+
+    Example Response (200):
+        {
+            "sucesso": true,
+            "pagamento_id": "123456789",
+            "status": "approved",
+            "aprovado": true,
+            "valor": 5500.0,
+            "email": "cliente@email.com"
+        }
+    """
+    if pagamento_service is None:
+        return jsonify({
+            "sucesso": False,
+            "erro": "Servico de pagamento nao configurado"
+        }), 500
+
+    info = pagamento_service.consultar_pagamento(str(pagamento_id))
+    return jsonify(info), 200 if info.get('sucesso') else 404
