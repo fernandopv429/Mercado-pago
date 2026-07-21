@@ -17,11 +17,12 @@ Exemplo:
     app.run()
 """
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
 
 from .routes import carrinho_bp, pagamento_bp, produto_bp
+from .swagger import swagger_bp
 from ..config import obter_config
 
 
@@ -63,6 +64,49 @@ def criar_app(config=None) -> Flask:
         }
     })
     
+    # ========== AUTENTICAÇÃO POR API KEY ==========
+
+    # Chave lida da variável de ambiente. Se não definida, a proteção
+    # fica DESLIGADA (útil em desenvolvimento).
+    API_KEY = os.getenv('API_KEY', '')
+
+    # Rotas que NÃO exigem API Key (públicas):
+    # - /api/pagamento/webhook : o Mercado Pago acessa sem chave
+    # - /docs e /openapi.json  : documentação
+    # - /api/health            : health check (útil para o Coolify monitorar)
+    ROTAS_PUBLICAS = {
+        '/api/pagamento/webhook',
+        '/docs',
+        '/openapi.json',
+        '/api/health',
+    }
+
+    @app.before_request
+    def verificar_api_key():
+        """Bloqueia requisições sem API Key válida (exceto rotas públicas)."""
+        # Se não há chave configurada, não protege (modo desenvolvimento)
+        if not API_KEY:
+            return None
+
+        # Libera requisições OPTIONS (preflight CORS)
+        if request.method == 'OPTIONS':
+            return None
+
+        # Libera rotas públicas
+        caminho = request.path.rstrip('/') or '/'
+        if caminho in ROTAS_PUBLICAS:
+            return None
+
+        # Demais rotas exigem a chave no header X-API-Key
+        chave_recebida = request.headers.get('X-API-Key', '')
+        if chave_recebida != API_KEY:
+            return jsonify({
+                'sucesso': False,
+                'erro': 'Não autorizado. Forneça uma API Key válida no header X-API-Key.'
+            }), 401
+
+        return None
+
     # ========== BLUEPRINTS ==========
     
     # Registrar rotas de produtos
@@ -73,6 +117,9 @@ def criar_app(config=None) -> Flask:
     
     # Registrar rotas de pagamento
     app.register_blueprint(pagamento_bp)
+
+    # Registrar documentação Swagger (/docs e /openapi.json)
+    app.register_blueprint(swagger_bp)
     
     # ========== ROTAS GERAIS ==========
     

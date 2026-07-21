@@ -16,7 +16,9 @@ Exemplo:
 """
 
 from flask import Blueprint, request, jsonify
-from ...services.instancias import carrinho_service, pagamento_service, ACCESS_TOKEN
+from ...services.instancias import (
+    carrinho_service, pagamento_service, ACCESS_TOKEN, webhook_service
+)
 
 # Criar blueprint de rotas
 pagamento_bp = Blueprint('pagamento', __name__, url_prefix='/api/pagamento')
@@ -232,11 +234,23 @@ def webhook_mercadopago():
         info = pagamento_service.consultar_pagamento(str(pagamento_id))
 
         if info.get('sucesso') and info.get('aprovado'):
-            # >>> PONTO DE INTEGRACAO <<<
-            # Aqui o pagamento esta CONFIRMADO como aprovado.
-            # Ex.: marcar pedido como pago, limpar carrinho, liberar produto.
+            # Pagamento CONFIRMADO como aprovado.
             print(f"[WEBHOOK] Pagamento APROVADO: id={info['pagamento_id']} "
                   f"valor={info['valor']} email={info['email']}")
+
+            # Reenvia o evento para a URL de destino cadastrada (se houver)
+            evento = {
+                "tipo": "pagamento.aprovado",
+                "pagamento_id": info["pagamento_id"],
+                "status": info["status"],
+                "valor": info["valor"],
+                "email": info["email"],
+                "metodo": info["metodo"],
+                "referencia_externa": info["referencia_externa"],
+                "data_aprovacao": info["data_aprovacao"],
+            }
+            resultado_envio = webhook_service.reenviar_evento(evento)
+            print(f"[WEBHOOK] Reenvio para destino: {resultado_envio}")
         else:
             print(f"[WEBHOOK] Pagamento id={pagamento_id} "
                   f"status={info.get('status')}")
@@ -275,3 +289,93 @@ def consultar_status_pagamento(pagamento_id: str):
 
     info = pagamento_service.consultar_pagamento(str(pagamento_id))
     return jsonify(info), 200 if info.get('sucesso') else 404
+
+
+# ========== CONFIGURAÇÃO DO WEBHOOK DE DESTINO ==========
+
+@pagamento_bp.route('/webhook-destino', methods=['GET'])
+def obter_webhook_destino():
+    """
+    Endpoint: GET /api/pagamento/webhook-destino
+
+    Retorna a URL de destino atualmente cadastrada, para onde os eventos
+    de pagamento aprovado sao reenviados.
+    """
+    url = webhook_service.obter_url()
+    return jsonify({
+        "sucesso": True,
+        "webhook_destino": url,
+        "configurado": bool(url),
+    }), 200
+
+
+@pagamento_bp.route('/webhook-destino', methods=['POST'])
+def definir_webhook_destino():
+    """
+    Endpoint: POST /api/pagamento/webhook-destino
+
+    Cadastra ou troca a URL de destino do webhook.
+
+    Body (JSON):
+        { "url": "https://meu-painel.com/webhook" }
+    """
+    dados = request.get_json(silent=True) or {}
+    url = dados.get('url', '').strip()
+
+    if not url:
+        return jsonify({
+            "sucesso": False,
+            "erro": "Campo 'url' e obrigatorio"
+        }), 400
+
+    if not (url.startswith('http://') or url.startswith('https://')):
+        return jsonify({
+            "sucesso": False,
+            "erro": "A url deve comecar com http:// ou https://"
+        }), 400
+
+    webhook_service.definir_url(url)
+    return jsonify({
+        "sucesso": True,
+        "mensagem": "URL de destino cadastrada com sucesso",
+        "webhook_destino": url,
+    }), 200
+
+
+@pagamento_bp.route('/webhook-destino', methods=['DELETE'])
+def remover_webhook_destino():
+    """
+    Endpoint: DELETE /api/pagamento/webhook-destino
+
+    Remove a URL de destino cadastrada (para de reenviar eventos).
+    """
+    removido = webhook_service.remover_url()
+    return jsonify({
+        "sucesso": True,
+        "removido": removido,
+        "mensagem": "URL removida" if removido else "Nenhuma URL estava cadastrada",
+    }), 200
+
+
+@pagamento_bp.route('/webhook-destino/testar', methods=['POST'])
+def testar_webhook_destino():
+    """
+    Endpoint: POST /api/pagamento/webhook-destino/testar
+
+    Envia um evento de teste para a URL de destino cadastrada, para
+    verificar se ela esta recebendo corretamente.
+    """
+    evento_teste = {
+        "tipo": "teste",
+        "mensagem": "Evento de teste do sistema de carrinho + Mercado Pago",
+        "pagamento_id": "TESTE-123",
+        "status": "approved",
+        "valor": 99.90,
+        "email": "teste@teste.com",
+    }
+    resultado = webhook_service.reenviar_evento(evento_teste)
+    sucesso = resultado.get('enviado', False)
+    return jsonify({
+        "sucesso": sucesso,
+        "resultado": resultado,
+    }), 200 if sucesso else 400

@@ -13,9 +13,13 @@ instância única é mais correto e também faz o modo memória funcionar.
 import os
 from .carrinho_service import CarrinhoService
 from .pagamento_service import PagamentoService
+from .webhook_service import WebhookService
 
 # Instância única do serviço de carrinho (lê REDIS_URL do ambiente)
 carrinho_service = CarrinhoService()
+
+# Serviço que gerencia a URL de destino e reenvia eventos de pagamento
+webhook_service = WebhookService()
 
 # Serviço de pagamento (só cria se houver token configurado)
 ACCESS_TOKEN = os.getenv('MERCADOPAGO_ACCESS_TOKEN', '')
